@@ -6,7 +6,7 @@ const { updateCategoryAggregates } = require('./categoryController'); // Import 
 
 const productController = {
   // Get all products
-  getAllProducts: async (req, res) => {
+  getAllProducts: async (req, res, next) => {
     try {
       const { search, brand, category, minPrice, maxPrice, inStock } = req.query;
       
@@ -44,28 +44,30 @@ const productController = {
       
       res.json(products);
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      next(error); 
     }
   },
   
   // Get single product
-  getProductById: async (req, res) => {
+  getProductById: async (req, res, next) => {
     try {
       const product = await Product.findById(req.params.id)
         .populate('category', 'name path');
       
-      if (!product) {
-        return res.status(404).json({ message: 'Product not found' });
-      }
+        if (!product) {
+          const error = new Error('Product not found');
+          error.statusCode = 404;
+          return next(error);
+        }
       
       res.json(product);
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      next(error);
     }
   },
   
   // Create new product
-  createProduct: async (req, res) => {
+  createProduct: async (req, res, next) => {
     try {
       const {
         name,
@@ -84,18 +86,27 @@ const productController = {
       // Check if category exists
       const categoryExists = await Category.findById(category);
       if (!categoryExists) {
-        return res.status(400).json({ message: 'Category not found' });
+        const error = new Error('Category not found');
+        error.statusCode = 400;
+        return next(error);
       }
       const hasChildren = await Category.exists({ parent: category });
       if (hasChildren) {
-        return res.status(400).json({ message: 'Products can only be added to leaf categories (categories with no subcategories).' });
+        const error = new Error(
+          'Products can only be added to leaf categories (categories with no subcategories).'
+        );
+        error.statusCode = 400;
+        return next(error);
       }
   
       // Check if SKU is unique
       const skuExists = await Product.findOne({ sku });
       if (skuExists) {
-        return res.status(400).json({ message: 'SKU already exists' });
+        const error = new Error('SKU already exists');
+        error.statusCode = 400;
+        return next(error);
       }
+
       
       const product = new Product({
         name,
@@ -118,12 +129,12 @@ const productController = {
       
       res.status(201).json(savedProduct);
     } catch (error) {
-      res.status(400).json({ message: error.message });
+      next(error);
     }
   },
   
   // Update product
-  updateProduct: async (req, res) => {
+  updateProduct: async (req, res, next) => {
     try {
       const {
         name,
@@ -143,36 +154,39 @@ const productController = {
       const product = await Product.findById(req.params.id);
       
       if (!product) {
-        return res.status(404).json({ message: 'Product not found' });
+        const error = new Error('Product not found');
+        error.statusCode = 404;
+        return next(error);
       }
       
       // If SKU is being changed, check if new SKU is unique
       if (sku && sku !== product.sku) {
         const skuExists = await Product.findOne({ sku });
         if (skuExists) {
-          return res.status(400).json({ message: 'SKU already exists' });
+          const error = new Error('SKU already exists');
+          error.statusCode = 400;
+          return next(error);
         }
       }
       if (category && category.toString() !== product.category.toString()) {
         const categoryExists = await Category.findById(category);
         if (!categoryExists) {
-          return res.status(400).json({ message: 'Category not found' });
+          const error = new Error('Category not found');
+          error.statusCode = 400;
+          return next(error);
         }
   
         // Check if the new category is a leaf category
         const hasChildren = await Category.exists({ parent: category });
         if (hasChildren) {
-          return res.status(400).json({ message: 'Products can only be associated with leaf categories (categories with no subcategories).' });
+          const error = new Error(
+            'Products can only be associated with leaf categories (categories with no subcategories).'
+          );
+          error.statusCode = 400;
+          return next(error);
         }
       }
-  
-      // If SKU is being changed, check if new SKU is unique
-      if (sku && sku !== product.sku) {
-        const skuExists = await Product.findOne({ sku });
-        if (skuExists) {
-          return res.status(400).json({ message: 'SKU already exists' });
-        }
-      }
+
       // Record stock change in history if quantity changes
       if (stock && stock.quantity !== undefined && stock.quantity !== product.stock.quantity) {
         const changeType = stock.quantity > product.stock.quantity ? 'in' : 'out';
@@ -218,17 +232,19 @@ const productController = {
       
       res.json(updatedProduct);
     } catch (error) {
-      res.status(400).json({ message: error.message });
+      next(error);
     }
   },
   
   // Delete product
-  deleteProduct: async (req, res) => {
+  deleteProduct: async (req, res, next) => {
     try {
       const product = await Product.findById(req.params.id);
       
       if (!product) {
-        return res.status(404).json({ message: 'Product not found' });
+        const error = new Error('Product not found');
+        error.statusCode = 404;
+        return next(error);
       }
       
       const category = product.category;
@@ -240,19 +256,21 @@ const productController = {
       
       res.json({ message: 'Product deleted successfully' });
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      next(error);
     }
   },
   
   // Update stock quantity
-  updateStock: async (req, res) => {
+  updateStock: async (req, res, next) => {
     try {
       const { quantity, notes } = req.body;
       
       const product = await Product.findById(req.params.id);
       
       if (!product) {
-        return res.status(404).json({ message: 'Product not found' });
+        const error = new Error('Product not found');
+        error.statusCode = 404;
+        return next(error);
       }
       
       const oldQuantity = product.stock.quantity;
@@ -274,10 +292,10 @@ const productController = {
       
       res.json(product);
     } catch (error) {
-      res.status(400).json({ message: error.message });
+      next(error);
     }
   },
-  searchProducts: async (req, res) => {
+  searchProducts: async (req, res, next) => {
     try {
       const { query } = req.query;
       const products = await Product.find({
@@ -285,7 +303,7 @@ const productController = {
       }).populate('category', 'name');
       res.json(products);
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      next(error);
     }
   },
 };

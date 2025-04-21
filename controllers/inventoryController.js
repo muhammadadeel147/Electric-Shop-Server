@@ -4,34 +4,36 @@ const { updateCategoryAggregates } = require('./categoryController'); // Import 
 const mongoose = require('mongoose');
 const inventoryController = {
   // Get all inventory transactions
-  getAllTransactions: async (req, res) => {
+  getAllTransactions: async (req, res, next) => {
     try {
       const transactions = await InventoryTransaction.find()
         .populate('products.product', 'name')
         .populate('createdBy', 'name');
       res.json(transactions);
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      next(error); 
     }
   },
 
   // Get a single inventory transaction by ID
-  getTransactionById: async (req, res) => {
+  getTransactionById: async (req, res, next) => {
     try {
       const transaction = await InventoryTransaction.findById(req.params.id)
         .populate('products.product', 'name')
         .populate('createdBy', 'name');
-      if (!transaction) {
-        return res.status(404).json({ message: 'Transaction not found' });
-      }
+        if (!transaction) {
+          const error = new Error('Transaction not found');
+          error.statusCode = 404;
+          return next(error);
+        }
       res.json(transaction);
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      next(error);
     }
   },
 
   // Create a new inventory transaction
-  createTransaction: async (req, res) => {
+  createTransaction: async (req, res, next) => {
     try {
       const { type, products, totalAmount, reference, notes, createdBy } = req.body;
 
@@ -39,15 +41,19 @@ const inventoryController = {
       for (const item of products) {
         const product = await Product.findById(item.product);
         if (!product) {
-          return res.status(400).json({ message: `Product with ID ${item.product} not found` });
+          const error = new Error(`Product with ID ${item.product} not found`);
+          error.statusCode = 400;
+          return next(error);
         }
 
         // Update stock based on transaction type
      // Validate stock for sales or adjustments
      if ((type === 'sale' || type === 'adjustment') && product.stock.quantity < item.quantity) {
-      return res.status(400).json({
-        message: `Insufficient stock for product ${product.name}. Available: ${product.stock.quantity}, Requested: ${item.quantity}`,
-      });
+      const error = new Error(
+        `Insufficient stock for product ${product.name}. Available: ${product.stock.quantity}, Requested: ${item.quantity}`
+      );
+      error.statusCode = 400;
+      return next(error);
     }
 
     // Update stock based on transaction type
@@ -74,21 +80,22 @@ const inventoryController = {
       const savedTransaction = await transaction.save();
       res.status(201).json(savedTransaction);
     } catch (error) {
-      res.status(400).json({ message: error.message });
+      next(error); 
     }
   },
 
   // Delete an inventory transaction
-  deleteTransaction: async (req, res) => {
+  deleteTransaction: async (req, res, next) => {
     const session = await mongoose.startSession(); // Start a session for the transaction
     session.startTransaction();
   
     try {
       const transaction = await InventoryTransaction.findById(req.params.id).session(session);
       if (!transaction) {
-        return res.status(404).json({ message: 'Transaction not found' });
+        const error = new Error('Transaction not found');
+        error.statusCode = 404;
+        return next(error);
       }
-  
       // Reverse stock changes if needed
       for (const item of transaction.products) {
         const product = await Product.findById(item.product).session(session);
@@ -117,7 +124,7 @@ const inventoryController = {
       await session.abortTransaction();
       session.endSession();
   
-      res.status(500).json({ message: error.message });
+      next(error);
     }
   },
 };

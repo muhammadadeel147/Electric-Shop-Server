@@ -43,28 +43,26 @@ const updateCategoryAggregates = async (categoryId) => {
 // Controller methods
 const categoryController = {
   // Get all categories with hierarchy
-  getAllCategories: async (req, res) => {
+  getAllCategories: async (req, res, next) => {
     try {
-      // Find top-level categories
-      const topCategories = await Category.find({ parent: null })
-        .populate({
+      const topCategories = await Category.find({ parent: null }).populate({
+        path: 'children',
+        populate: {
           path: 'children',
           populate: {
-            path: 'children', // Goes two levels deep
-            populate: {
-              path: 'children' // Goes three levels deep
-            }
-          }
-        });
-      
+            path: 'children',
+          },
+        },
+      });
+
       res.json(topCategories);
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      next(error); // Pass the error to the centralized error handler
     }
   },
   
   // Get single category with its children
-  getCategoryById: async (req, res) => {
+  getCategoryById: async (req, res,next) => {
     try {
       const category = await Category.findById(req.params.id)
         .populate({
@@ -75,47 +73,74 @@ const categoryController = {
         });
       
       if (!category) {
-        return res.status(404).json({ message: 'Category not found' });
+        const error = new Error('Category not found');
+        error.statusCode = 404;
+        return next(error);
       }
       
       res.json(category);
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      next(error);
     }
   },
   
   // Create new category
-  createCategory: async (req, res) => {
-    try {
-      const { name, description, parent } = req.body;
-      
-      const category = new Category({
-        name,
-        description,
-        parent
-      });
-      
-      const savedCategory = await category.save();
-      
-      // Update parent aggregates if needed
-      if (parent) {
-        await updateCategoryAggregates(parent);
+  // Create new category
+createCategory: async (req, res, next) => {
+  try {
+    const { name, description, parent } = req.body;
+
+    // If a parent category is specified, validate it
+    if (parent) {
+      const parentCategory = await Category.findById(parent);
+
+      if (!parentCategory) {
+        const error = new Error('Parent category not found');
+        error.statusCode = 404;
+        return next(error);
       }
-      
-      res.status(201).json(savedCategory);
-    } catch (error) {
-      res.status(400).json({ message: error.message });
+
+      // Check if the parent category has products
+      const hasProducts = await Product.exists({ category: parent });
+      if (hasProducts) {
+        const error = new Error(
+          'Cannot create a subcategory for a category that already has products. Products can only belong to leaf categories.'
+        );
+        error.statusCode = 400;
+        return next(error);
+      }
     }
-  },
+
+    // Create the new category
+    const category = new Category({
+      name,
+      description,
+      parent,
+    });
+
+    const savedCategory = await category.save();
+
+    // Update parent aggregates if needed
+    if (parent) {
+      await updateCategoryAggregates(parent);
+    }
+
+    res.status(201).json(savedCategory);
+  } catch (error) {
+    next(error);
+  }
+},
   
   // Update category
-  updateCategory: async (req, res) => {
+  updateCategory: async (req, res,next) => {
     try {
       const { name, description, parent, isActive } = req.body;
       const oldCategory = await Category.findById(req.params.id);
       
       if (!oldCategory) {
-        return res.status(404).json({ message: 'Category not found' });
+        const error = new Error('Category not found');
+        error.statusCode = 404;
+        return next(error);
       }
       
       const oldParent = oldCategory.parent;
@@ -134,33 +159,38 @@ const categoryController = {
       
       res.json(updatedCategory);
     } catch (error) {
-      res.status(400).json({ message: error.message });
+      next(error);
     }
   },
   
   // Delete category
-  deleteCategory: async (req, res) => {
+  deleteCategory: async (req, res,next) => {
     try {
       const category = await Category.findById(req.params.id);
       
       if (!category) {
-        return res.status(404).json({ message: 'Category not found' });
+        const error = new Error('Category not found');
+        error.statusCode = 404;
+        return next(error);
       }
       
       // Check if category has children
       const hasChildren = await Category.exists({ parent: req.params.id });
       if (hasChildren) {
-        return res.status(400).json({ 
-          message: 'Cannot delete category with subcategories. Delete subcategories first.' 
-        });
+        const error = new Error(
+          'Cannot delete category with subcategories. Delete subcategories first.'
+        );
+        error.statusCode = 400;
+        return next(error);
       }
-      
       // Check if category has products
       const hasProducts = await Product.exists({ category: req.params.id });
       if (hasProducts) {
-        return res.status(400).json({ 
-          message: 'Cannot delete category with products. Move or delete products first.' 
-        });
+        const error = new Error(
+          'Cannot delete category with products. Move or delete products first.'
+        );
+        error.statusCode = 400;
+        return next(error);
       }
       
       const parent = category.parent;
@@ -174,19 +204,21 @@ const categoryController = {
       
       res.json({ message: 'Category deleted successfully' });
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      next(error);
     }
   },
   
   // Get products in a category
-  getCategoryProducts: async (req, res) => {
+  getCategoryProducts: async (req, res,next) => {
     try {
       const category = await Category.findById(req.params.id);
       
+     
       if (!category) {
-        return res.status(404).json({ message: 'Category not found' });
+        const error = new Error('Category not found');
+        error.statusCode = 404;
+        return next(error);
       }
-      
       // Find all subcategories at any level
       const subcategoryIds = [req.params.id];
       const findAllSubcategories = async (parentId) => {
@@ -201,10 +233,10 @@ const categoryController = {
       
       // Find products in this category and all subcategories
       const products = await Product.find({ category: { $in: subcategoryIds } });
-      
+  
       res.json(products);
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      next(error);
     }
   }
 };
