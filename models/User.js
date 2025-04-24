@@ -19,19 +19,13 @@ const UserSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    default: 'customer',
-    enum: ['customer', 'admin']
+    default: 'user',
+    enum: ['user', 'admin']
   },
-  resetPasswordToken: {
-    type: String,
-  },
-  resetPasswordExpire: {
-    type: Date,
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
+  resetPasswordToken: String,
+  resetPasswordExpire: Date
+}, {
+  timestamps: true // Automatically adds createdAt and updatedAt
 });
 UserSchema.methods.getResetPasswordToken = function () {
   const resetToken = crypto.randomBytes(20).toString('hex');

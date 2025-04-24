@@ -18,7 +18,7 @@ exports.register = async (req, res, next) => {
 
   try {
     // Check if user exists
-    let user = await User.findOne({ email });
+    let user = await User.findOne({ email: email.toLowerCase() });
     if (user) {
       const error = new Error('User already exists');
       error.status = 400;
@@ -52,7 +52,10 @@ exports.register = async (req, res, next) => {
       { expiresIn: '5d' },
       (err, token) => {
         if (err) return next(err); // Pass the error to the centralized error handler
-        res.json({ token });
+        res.status(201).json({
+          success: true,
+          message: 'User registered successfully! Welcome to Electric Shop.',
+        });
       }
     );
   } catch (err) {
@@ -73,7 +76,7 @@ exports.login = async (req, res, next) => {
 
     if (!user) {
       const error = new Error('Invalid credentials');
-      error.status = 400;
+      error.statusCode = 400; 
       return next(error);
     }
 
@@ -83,7 +86,7 @@ exports.login = async (req, res, next) => {
 
     if (!isMatch) {
       const error = new Error('Invalid credentials');
-      error.status = 400;
+      error.statusCode = 400;
       return next(error);
     }
 
@@ -100,7 +103,11 @@ exports.login = async (req, res, next) => {
       { expiresIn: '5d' },
       (err, token) => {
         if (err) return next(err);
-        res.json({ token });
+        res.status(200).json({
+          success: true,
+          message: 'User Login successfully.',
+          token,
+        });
       }
     );
   } catch (err) {
@@ -116,7 +123,11 @@ exports.getUser = async (req, res, next) => {
       error.status = 404;
       return next(error); // Pass the error to the centralized error handler
     }
-    res.json(user);
+    res.status(200).json({
+      success: true,
+      message: 'User data retrieved successfully.',
+      user,
+    });
   } catch (err) {
     next(err); // Pass the error to the centralized error handler
   }
@@ -140,8 +151,8 @@ exports.forgotPassword = async (req, res, next) => {
     await user.save();
 
     // Create reset URL
-    const resetUrl = `${req.protocol}://${req.get('host')}/api/auth/reset-password/${resetToken}`;
-
+    // const resetUrl = `${req.protocol}://${req.get('host')}/reset-password/${resetToken}`;
+    const resetUrl = `http://localhost:3000/reset-password/${resetToken}`;
     // Email message
     const message = `
     <div style="font-family: 'Segoe UI', Roboto, sans-serif; background-color: #f4f4f4; padding: 20px;">
@@ -193,8 +204,10 @@ exports.forgotPassword = async (req, res, next) => {
       subject: 'Reset Your Password - Electric Shop',
       html: message
     });
-
-    res.status(200).json({ message: 'Password reset email sent' });
+    res.status(200).json({
+      success: true,
+      message: 'Password reset email sent successfully.',
+    });
   } catch (error) {
     next(error);
   }
@@ -226,8 +239,10 @@ exports.resetPassword = async (req, res, next) => {
     user.resetPasswordExpire = undefined;
 
     await user.save();
-
-    res.status(200).json({ message: 'Password reset successful' });
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successfully.',
+    });
   } catch (error) {
     next(error);
   }
